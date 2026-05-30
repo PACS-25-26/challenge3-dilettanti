@@ -1,0 +1,6 @@
+.idea/
+*.o
+main
+*.vti
+*.vtk
+.DS_Store
