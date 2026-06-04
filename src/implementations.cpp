@@ -1,15 +1,49 @@
+/**
+ * @file implementations.cpp
+ * @brief Source file containing the implementations of the Jacobi solvers and I/O functions.
+ */
 #include "declarations.hh"
 
+Matrix sequential_jacobi(int n, double tol, std::function<double(double,double)> f){
+    Matrix U = Matrix::Zero(n, n);
+    Matrix old_U = U;
+    
+    double h = 1.0/(n - 1);
+    double eps = 1.0;
+    int check = 0;
 
-void jacobi(int n, double tol){
+    while(check != 1){
+        for(int i = 1; i < n - 1; ++i){
+            for(int j = 1; j < n - 1; ++j){
+                double x = h*j;
+                double y = h*i;
+                U(i, j) = 0.25*(old_U(i - 1, j) + old_U(i + 1, j) + old_U(i, j - 1) + old_U(i, j + 1) + h*h*f(x, y));
+            }
+        }
+
+        eps = 0.0;
+        for(int i = 1; i < n - 1; ++i){
+            for(int j = 1; j < n - 1; ++j){
+                double diff = U(i, j) - old_U(i, j);
+                eps += diff*diff;
+            }
+        }
+        eps = std::sqrt(h*eps);
+
+        if(eps < tol)
+            check = 1;
+
+        old_U = U;
+    }
+    return U;
+}
+
+
+Matrix jacobi(int n, double tol, std::function<double(double,double)> f){
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    auto f = [](double x, double y){  // Per ora così poi mettiamo muparser
-        return 8*PI*PI*sin(2*PI*x)*sin(2*PI*y);
-    };
     
     int local_n = n/size;
     int resto = n%size;
@@ -67,17 +101,20 @@ void jacobi(int n, double tol){
         bottom_neigbor = rank + 1;
     }
 
-    while(check != 1){
+    int iter = 0;
+    while(check != 1 && iter < 100000){
         check = 0;
         local_check = 0;
 
+        if(size>1){
         // step 1: comunicazione
             MPI_Sendrecv(local_U.row(1).data(), n, MPI_DOUBLE, top_neigbor, 0, old_local_U.row(0).data(), n, MPI_DOUBLE, top_neigbor, 
                         0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // invio la mia riga 1 a top, ricevo la riga ghost 0 da top
             MPI_Sendrecv(local_U.row(local_n).data(), n, MPI_DOUBLE, bottom_neigbor, 0, old_local_U.row(local_n+1).data(), n, MPI_DOUBLE, bottom_neigbor, 
                         0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // invio la mia riga local_n a bottom, ricevo la riga ghost local_n+1 da bottom
-        
+        }
         // step 2: calcolo
+        #pragma omp parallel for collapse(2)
         for(int i = 1; i<=local_n; ++i){
             for(int j=1; j<n-1; ++j){
                 double x = h*j;
@@ -91,6 +128,7 @@ void jacobi(int n, double tol){
 
         // step 3: check condizione
         eps = 0.0;
+        #pragma omp parallel for collapse(2) reduction(+:eps)
         for(int i = 1; i<=local_n; ++i){
             for(int j=0; j<n; ++j){
                 eps += (local_U(i,j)-old_local_U(i,j))*(local_U(i,j)-old_local_U(i,j));
@@ -104,25 +142,25 @@ void jacobi(int n, double tol){
         MPI_Allreduce(&local_check, &check, 1, MPI_INT, MPI_PROD, MPI_COMM_WORLD);
 
         old_local_U = local_U;
+        iter++;
         }
 
     MPI_Gatherv(local_U.row(1).data(), local_dim, MPI_DOUBLE,
                     U.data(), sendcount_vector.data(), displ_vector.data(), MPI_DOUBLE,
                     0, MPI_COMM_WORLD);
 
-    // Solo il rank 0 salva il file VTK
-    if (rank == 0) {
-        save_vtk_xml("poisson_mpi_solution.vti", U, h);
-    }
+    return U;
 }
 
 
-void save_vtk_xml(const std::string& filename, const Matrix& u, double h) {
+void save_vtk_xml(const std::string& filename, const Matrix& u, int n) {
     std::ofstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Errore nell'apertura del file VTK!" << std::endl;
         return;
     }
+
+    double h = 1.0/(n-1);
 
     // Numero di punti lungo X e Y (u è N x N)
     int nX = u.rows();
@@ -140,7 +178,7 @@ void save_vtk_xml(const std::string& filename, const Matrix& u, double h) {
     file << "        <DataArray type=\"Float64\" Name=\"Soluzione\" format=\"ascii\">\n";
 
     file << std::scientific << std::setprecision(6);
-    
+    // Output the matrix data
     for (int i = 0; i < nX; ++i) {
         for (int j = 0; j < nY; ++j) {
             file << u(i, j) << " ";
