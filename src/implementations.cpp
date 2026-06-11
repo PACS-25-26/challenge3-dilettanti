@@ -7,6 +7,9 @@
 Matrix sequential_jacobi(int n, double tol, std::function<double(double,double)> f){
     Matrix U = Matrix::Zero(n, n);
     Matrix old_U = U;
+    // REVIEW: old_U = U performs a full matrix copy every iteration below.
+    // Swapping two buffers would avoid repeated O(n^2) copies.
+    // use std::swap, is more efficient here since it exploits modve semantic.
     
     double h = 1.0/(n - 1);
     double eps = 1.0;
@@ -137,6 +140,10 @@ Matrix jacobi(int n, double tol, std::function<double(double,double)> f){
         eps = h*eps;
         eps = std::sqrt(eps);
 
+        // REVIEW: this checks a rank-local norm against tol and then combines
+        // booleans with MPI_Allreduce. That is not equivalent to testing the
+        // global residual/norm, so convergence depends on the domain split and
+        // can report success too early when each local piece is small enough.
         if(eps<tol)
             local_check = 1;
         MPI_Allreduce(&local_check, &check, 1, MPI_INT, MPI_PROD, MPI_COMM_WORLD);
@@ -195,7 +202,6 @@ void save_vtk_xml(const std::string& filename, const Matrix& u, int n) {
     file.close();
     std::cout << "File VTK salvato con successo: " << filename << std::endl;
 }
-
 
 
 

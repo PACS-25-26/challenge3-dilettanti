@@ -7,9 +7,12 @@ CXXFLAGS = -Wall -O3 -I../header
 # I sorgenti e gli oggetti
 SRCS = main.cpp ../src/implementations.cpp
 OBJS = main.o implementations.o
-
+#
+# REVIEW: if you want openMP you eed to add -fopenmp to CXXFLAGS and -fopenmp to the linking step (the line that creates the executable)
+CXXFLAGS += -fopenmp
 all: main
 
+# REVIEW: This makefile variables are not used in the standard way. Check the lecture slides.
 main: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(OBJS) -o main
 

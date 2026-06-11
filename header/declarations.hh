@@ -7,6 +7,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <functional>
 #include <mpi.h>
 #include <stdexcept>
 #include <Eigen/Dense>
@@ -18,6 +19,9 @@
 
 using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
+// REVIEW: this header relies on std::function, so it should
+// include <functional> directly instead of depending on transitive includes.
+
 /**
  * @brief Solves the Laplace equation using a sequential Jacobi iteration.
  * * @param n Number of grid points along one dimension.
@@ -25,6 +29,8 @@ using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowM
  * @param f The forcing function of the Laplace equation.
  * @return Matrix containing the computed solution over the grid.
  */
+// REVIEW: passing std::function by value adds copy overhead to
+// every solver call. A templated callable or const reference would be cheaper.
 Matrix sequential_jacobi(int n, double tol, std::function<double(double,double)>);
 
 /**

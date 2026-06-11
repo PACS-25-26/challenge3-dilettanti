@@ -30,7 +30,13 @@ int main (int argc, char *argv[]){
     };
 
     timer.start();
+    // REVIEW: there is no MPI_Barrier before starting the timer. On a loaded
+    // system, ranks can begin the benchmark at different times, which makes the
+    // reported "parallel" runtime less reliable.
     Matrix U_seq;
+    // REVIEW: every MPI rank executes the sequential benchmark. That wastes
+    // work and can distort timing because ranks on the same node contend for
+    // cores/cache before the parallel measurement even starts.
     for(int i=0; i<test_lenght; ++i)
         U_seq = sequential_jacobi(n, tolleranza, f);
     
@@ -42,6 +48,7 @@ int main (int argc, char *argv[]){
 
     timer.start();
     Matrix U_par;
+    
     for(int i=0; i<test_lenght; ++i)
         U_par = jacobi(n, tolleranza, f);
 
